@@ -1,0 +1,19 @@
+# Test site (gitignored - local dev only)
+testsite/
+
+# Go build output
+umbraco
+/dist/
+
+# Go test cache
+*.test
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
