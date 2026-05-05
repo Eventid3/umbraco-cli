@@ -87,9 +87,29 @@ func (c *Client) Get(path string, dest interface{}) error {
 	return c.do(http.MethodGet, path, nil, dest)
 }
 
-// Post performs an authenticated POST request.
+// Post performs an authenticated POST request and decodes the JSON response into dest.
 func (c *Client) Post(path string, body interface{}, dest interface{}) error {
 	return c.do(http.MethodPost, path, body, dest)
+}
+
+// PostCreate performs a POST for resource creation and returns the new resource ID
+// from the "umb-generated-resource" response header. Umbraco returns HTTP 201 with
+// an empty body for all create endpoints; the ID lives only in the header.
+func (c *Client) PostCreate(path string, body interface{}) (string, error) {
+	resp, _, err := c.doWithResp(http.MethodPost, path, body)
+	if err != nil {
+		return "", err
+	}
+	id := resp.Header.Get("umb-generated-resource")
+	if id == "" {
+		// Fallback: try Location header (last path segment).
+		loc := resp.Header.Get("Location")
+		if loc != "" {
+			parts := strings.Split(strings.TrimRight(loc, "/"), "/")
+			id = parts[len(parts)-1]
+		}
+	}
+	return id, nil
 }
 
 // Put performs an authenticated PUT request.
@@ -102,21 +122,24 @@ func (c *Client) Delete(path string) error {
 	return c.do(http.MethodDelete, path, nil, nil)
 }
 
-func (c *Client) do(method, path string, body interface{}, dest interface{}) error {
+// doWithResp executes the request and returns the raw *http.Response alongside
+// the body bytes. The caller must not read resp.Body (already consumed).
+// Only errors on non-2xx status.
+func (c *Client) doWithResp(method, path string, body interface{}) (*http.Response, []byte, error) {
 	fullURL := c.baseURL + apiBase + path
 
 	var reqBody io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return fmt.Errorf("cannot marshal request body: %w", err)
+			return nil, nil, fmt.Errorf("cannot marshal request body: %w", err)
 		}
 		reqBody = strings.NewReader(string(b))
 	}
 
 	req, err := http.NewRequest(method, fullURL, reqBody)
 	if err != nil {
-		return fmt.Errorf("cannot create request: %w", err)
+		return nil, nil, fmt.Errorf("cannot create request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
@@ -126,28 +149,35 @@ func (c *Client) do(method, path string, body interface{}, dest interface{}) err
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return nil, nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// Try to extract a structured error message.
 		var apiErr struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
 		}
 		_ = json.Unmarshal(respBody, &apiErr)
 		if apiErr.Detail != "" {
-			return fmt.Errorf("API error %d: %s", resp.StatusCode, apiErr.Detail)
+			return resp, respBody, fmt.Errorf("API error %d: %s", resp.StatusCode, apiErr.Detail)
 		}
 		if apiErr.Title != "" {
-			return fmt.Errorf("API error %d: %s", resp.StatusCode, apiErr.Title)
+			return resp, respBody, fmt.Errorf("API error %d: %s", resp.StatusCode, apiErr.Title)
 		}
-		return fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
+		return resp, respBody, fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
+	return resp, respBody, nil
+}
+
+func (c *Client) do(method, path string, body interface{}, dest interface{}) error {
+	_, respBody, err := c.doWithResp(method, path, body)
+	if err != nil {
+		return err
+	}
 	if dest != nil && len(respBody) > 0 {
 		if err := json.Unmarshal(respBody, dest); err != nil {
 			return fmt.Errorf("cannot parse response: %w", err)

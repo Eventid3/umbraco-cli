@@ -137,14 +137,13 @@ var mediaUploadCmd = &cobra.Command{
 			body["parent"] = map[string]string{"id": parentID}
 		}
 
-		var result map[string]interface{}
-		if err := client.Post("/media", body, &result); err != nil {
+		id, err := client.PostCreate("/media", body)
+		if err != nil {
 			return fmt.Errorf("media creation failed: %w", err)
 		}
 		if output.IsJSON() {
-			output.JSON(result)
+			output.JSON(map[string]string{"id": id, "name": fileName})
 		} else {
-			id, _ := result["id"].(string)
 			output.Line("Media item created: %s (%s)", fileName, id)
 		}
 		return nil

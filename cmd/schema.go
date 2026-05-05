@@ -60,6 +60,77 @@ var schemaDocTypeGetCmd = &cobra.Command{
 	},
 }
 
+var schemaDocTypeCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a document type from a JSON file",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		body, err := readJSONInput(cmd, "file")
+		if err != nil {
+			return err
+		}
+		client, err := newClientFromFlags()
+		if err != nil {
+			return err
+		}
+		id, err := client.PostCreate("/document-type", body)
+		if err != nil {
+			return err
+		}
+		if output.IsJSON() {
+			output.JSON(map[string]string{"id": id})
+		} else {
+			output.Line("Document type created: %s", id)
+		}
+		return nil
+	},
+}
+
+var schemaDocTypeUpdateCmd = &cobra.Command{
+	Use:   "update <id>",
+	Short: "Update a document type from a JSON file",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		body, err := readJSONInput(cmd, "file")
+		if err != nil {
+			return err
+		}
+		client, err := newClientFromFlags()
+		if err != nil {
+			return err
+		}
+		if err := client.Put("/document-type/"+args[0], body, nil); err != nil {
+			return err
+		}
+		if output.IsJSON() {
+			output.JSON(map[string]string{"id": args[0], "status": "updated"})
+		} else {
+			output.Line("Document type %s updated.", args[0])
+		}
+		return nil
+	},
+}
+
+var schemaDocTypeDeleteCmd = &cobra.Command{
+	Use:   "delete <id>",
+	Short: "Delete a document type",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client, err := newClientFromFlags()
+		if err != nil {
+			return err
+		}
+		if err := client.Delete("/document-type/" + args[0]); err != nil {
+			return err
+		}
+		if output.IsJSON() {
+			output.JSON(map[string]string{"id": args[0], "status": "deleted"})
+		} else {
+			output.Line("Document type %s deleted.", args[0])
+		}
+		return nil
+	},
+}
+
 // -- data-type subcommands --
 
 var schemaDataTypeCmd = &cobra.Command{
@@ -125,16 +196,99 @@ var schemaDataTypeGetCmd = &cobra.Command{
 	},
 }
 
+var schemaDataTypeCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a data type from a JSON file",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		body, err := readJSONInput(cmd, "file")
+		if err != nil {
+			return err
+		}
+		client, err := newClientFromFlags()
+		if err != nil {
+			return err
+		}
+		id, err := client.PostCreate("/data-type", body)
+		if err != nil {
+			return err
+		}
+		if output.IsJSON() {
+			output.JSON(map[string]string{"id": id})
+		} else {
+			output.Line("Data type created: %s", id)
+		}
+		return nil
+	},
+}
+
+var schemaDataTypeUpdateCmd = &cobra.Command{
+	Use:   "update <id>",
+	Short: "Update a data type from a JSON file",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		body, err := readJSONInput(cmd, "file")
+		if err != nil {
+			return err
+		}
+		client, err := newClientFromFlags()
+		if err != nil {
+			return err
+		}
+		if err := client.Put("/data-type/"+args[0], body, nil); err != nil {
+			return err
+		}
+		if output.IsJSON() {
+			output.JSON(map[string]string{"id": args[0], "status": "updated"})
+		} else {
+			output.Line("Data type %s updated.", args[0])
+		}
+		return nil
+	},
+}
+
+var schemaDataTypeDeleteCmd = &cobra.Command{
+	Use:   "delete <id>",
+	Short: "Delete a data type",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client, err := newClientFromFlags()
+		if err != nil {
+			return err
+		}
+		if err := client.Delete("/data-type/" + args[0]); err != nil {
+			return err
+		}
+		if output.IsJSON() {
+			output.JSON(map[string]string{"id": args[0], "status": "deleted"})
+		} else {
+			output.Line("Data type %s deleted.", args[0])
+		}
+		return nil
+	},
+}
+
 func init() {
 	schemaDocTypeListCmd.Flags().Int("skip", 0, "Number of items to skip")
 	schemaDocTypeListCmd.Flags().Int("take", 100, "Number of items to return")
 	schemaDataTypeListCmd.Flags().Int("skip", 0, "Number of items to skip")
 	schemaDataTypeListCmd.Flags().Int("take", 100, "Number of items to return")
 
+	schemaDocTypeCreateCmd.Flags().String("file", "", "Path to JSON file (use - for stdin)")
+	schemaDocTypeUpdateCmd.Flags().String("file", "", "Path to JSON file (use - for stdin)")
+	schemaDataTypeCreateCmd.Flags().String("file", "", "Path to JSON file (use - for stdin)")
+	schemaDataTypeUpdateCmd.Flags().String("file", "", "Path to JSON file (use - for stdin)")
+
 	schemaDocTypeCmd.AddCommand(schemaDocTypeListCmd)
 	schemaDocTypeCmd.AddCommand(schemaDocTypeGetCmd)
+	schemaDocTypeCmd.AddCommand(schemaDocTypeCreateCmd)
+	schemaDocTypeCmd.AddCommand(schemaDocTypeUpdateCmd)
+	schemaDocTypeCmd.AddCommand(schemaDocTypeDeleteCmd)
+
 	schemaDataTypeCmd.AddCommand(schemaDataTypeListCmd)
 	schemaDataTypeCmd.AddCommand(schemaDataTypeGetCmd)
+	schemaDataTypeCmd.AddCommand(schemaDataTypeCreateCmd)
+	schemaDataTypeCmd.AddCommand(schemaDataTypeUpdateCmd)
+	schemaDataTypeCmd.AddCommand(schemaDataTypeDeleteCmd)
 
 	schemaCmd.AddCommand(schemaDocTypeCmd)
 	schemaCmd.AddCommand(schemaDataTypeCmd)

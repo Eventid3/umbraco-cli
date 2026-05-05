@@ -147,6 +147,17 @@ umbraco schema doctype list [--skip N] [--take N] [--json]
 # Get a document type by ID
 umbraco schema doctype get <id> [--json]
 
+# Create a document type from a JSON file
+umbraco schema doctype create --file doctype.json [--json]
+# Prints: "Document type created: <id>"
+# JSON output: {"id": "<uuid>"}
+
+# Update a document type
+umbraco schema doctype update <id> --file doctype.json [--json]
+
+# Delete a document type
+umbraco schema doctype delete <id>
+
 # List data types — uses GET /filter/data-type
 umbraco schema datatype list [--skip N] [--take N] [--json]
 # Table columns: ID, NAME, EDITOR ALIAS
@@ -154,6 +165,60 @@ umbraco schema datatype list [--skip N] [--take N] [--json]
 
 # Get a data type by ID
 umbraco schema datatype get <id> [--json]
+
+# Create a data type from a JSON file
+umbraco schema datatype create --file datatype.json [--json]
+# Prints: "Data type created: <id>"
+# JSON output: {"id": "<uuid>"}
+
+# Update a data type
+umbraco schema datatype update <id> --file datatype.json [--json]
+
+# Delete a data type
+umbraco schema datatype delete <id>
+```
+
+#### Minimum viable JSON bodies
+
+**Document type create/update:**
+```json
+{
+  "name": "Blog Post",
+  "alias": "blogPost",
+  "icon": "icon-document",
+  "allowedAsRoot": true,
+  "variesByCulture": false,
+  "variesBySegment": false,
+  "isElement": false,
+  "properties": [],
+  "containers": [],
+  "compositions": [],
+  "allowedTemplates": [],
+  "defaultTemplate": null,
+  "allowedDocumentTypes": [],
+  "cleanup": {"preventCleanup": false}
+}
+```
+
+Properties inside a document type require:
+- `id` — client-generated UUID
+- `alias` — camelCase string
+- `name` — display name
+- `dataType` — `{"id": "<datatype-uuid>"}`
+- `sortOrder` — integer
+- `validation` — `{"mandatory": false, "mandatoryMessage": null, "regEx": null, "regExMessage": null}`
+- `appearance` — `{"labelOnTop": false}`
+- `variesByCulture` — bool
+- `variesBySegment` — bool
+
+**Data type create/update:**
+```json
+{
+  "name": "My Textbox",
+  "editorAlias": "Umbraco.TextBox",
+  "editorUiAlias": "Umb.PropertyEditorUi.TextBox",
+  "values": []
+}
 ```
 
 ### System
@@ -179,6 +244,33 @@ umbraco system cache-rebuild
 ---
 
 ## Agent Patterns
+
+### Chaining: create schema → create content
+
+```sh
+# 1. Create a data type
+umbraco schema datatype create --file - <<'EOF' --json
+{"name":"My Textbox","editorAlias":"Umbraco.TextBox","editorUiAlias":"Umb.PropertyEditorUi.TextBox","values":[]}
+EOF
+# Returns: {"id": "<datatype-uuid>"}
+
+# 2. Create a document type referencing that data type
+umbraco schema doctype create --file doctype.json --json
+# Returns: {"id": "<doctype-uuid>"}
+
+# 3. Create a content node using the new document type
+umbraco content create --file - <<'EOF' --json
+{
+  "documentType": {"id": "<doctype-uuid>"},
+  "template": null,
+  "values": [{"alias":"title","value":"Hello"}],
+  "variants": [{"culture": null, "segment": null, "name": "My Page"}]
+}
+EOF
+
+# 4. Publish it
+umbraco content publish <id-from-step-3>
+```
 
 ### Chaining: get schema → create content
 

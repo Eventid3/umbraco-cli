@@ -84,6 +84,14 @@ var contentGetCmd = &cobra.Command{
 var contentCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a document (pass JSON body via --file or stdin with --file=-)",
+	Long: `Create a document. The JSON body must contain at minimum:
+
+  {
+    "documentType": {"id": "<doctype-uuid>"},
+    "template": null,
+    "values": [],
+    "variants": [{"culture": null, "segment": null, "name": "My Page"}]
+  }`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body, err := readJSONInput(cmd, "file")
 		if err != nil {
@@ -93,11 +101,15 @@ var contentCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		var result map[string]interface{}
-		if err := client.Post("/document", body, &result); err != nil {
+		id, err := client.PostCreate("/document", body)
+		if err != nil {
 			return err
 		}
-		output.JSON(result)
+		if output.IsJSON() {
+			output.JSON(map[string]string{"id": id})
+		} else {
+			output.Line("Document created: %s", id)
+		}
 		return nil
 	},
 }
@@ -115,11 +127,14 @@ var contentUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		var result map[string]interface{}
-		if err := client.Put("/document/"+args[0], body, &result); err != nil {
+		if err := client.Put("/document/"+args[0], body, nil); err != nil {
 			return err
 		}
-		output.JSON(result)
+		if output.IsJSON() {
+			output.JSON(map[string]string{"id": args[0]})
+		} else {
+			output.Line("Document %s updated.", args[0])
+		}
 		return nil
 	},
 }
