@@ -8,11 +8,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// mediaItem is the tree response shape. Like documents, media has no top-level
+// "name" — it lives in variants[0].name (confirmed against a live instance) — so
+// Name is populated from Variants after decoding rather than via a json tag.
 type mediaItem struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	HasChildren bool   `json:"hasChildren"`
 	IsFolder    bool   `json:"isFolder"`
+	Variants    []struct {
+		Name string `json:"name"`
+	} `json:"variants"`
+}
+
+func (m *mediaItem) resolveName() {
+	if m.Name == "" && len(m.Variants) > 0 {
+		m.Name = m.Variants[0].Name
+	}
 }
 
 type mediaListResponse struct {
@@ -28,17 +40,29 @@ var mediaCmd = &cobra.Command{
 var mediaListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List media items",
+	Long: `List media items at the library root, or pass --parent to list the
+contents of a specific media folder instead.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		skip, _ := cmd.Flags().GetInt("skip")
 		take, _ := cmd.Flags().GetInt("take")
+		parent, _ := cmd.Flags().GetString("parent")
 
 		client, err := newClientFromFlags()
 		if err != nil {
 			return err
 		}
+		var path string
+		if parent != "" {
+			path = fmt.Sprintf("/tree/media/children?parentId=%s&skip=%d&take=%d", parent, skip, take)
+		} else {
+			path = fmt.Sprintf("/tree/media/root?skip=%d&take=%d", skip, take)
+		}
 		var result mediaListResponse
-		if err := client.Get(fmt.Sprintf("/tree/media/root?skip=%d&take=%d", skip, take), &result); err != nil {
+		if err := client.Get(path, &result); err != nil {
 			return err
+		}
+		for i := range result.Items {
+			result.Items[i].resolveName()
 		}
 		if output.IsJSON() {
 			output.JSON(result)
@@ -153,6 +177,7 @@ var mediaUploadCmd = &cobra.Command{
 func init() {
 	mediaListCmd.Flags().Int("skip", 0, "Number of items to skip")
 	mediaListCmd.Flags().Int("take", 100, "Number of items to return")
+	mediaListCmd.Flags().String("parent", "", "Parent media folder ID (list its contents instead of the root)")
 	mediaUploadCmd.Flags().String("parent", "", "Parent media folder ID")
 	mediaUploadCmd.Flags().String("media-type", "Image", "Media type alias (e.g. Image, File, Video)")
 

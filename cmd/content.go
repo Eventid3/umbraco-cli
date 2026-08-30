@@ -8,11 +8,25 @@ import (
 )
 
 // Document represents a minimal Umbraco document/content node (tree response shape).
+// The tree endpoint has no top-level "name" — display name lives in variants[0].name
+// (documents are variant-by-culture content, confirmed against a live instance) —
+// so Name is populated from Variants after decoding rather than via a json tag.
 type Document struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	HasChildren bool   `json:"hasChildren"`
 	IsFolder    bool   `json:"isFolder"`
+	Variants    []struct {
+		Name string `json:"name"`
+	} `json:"variants"`
+}
+
+// resolveName fills in Name from the first variant when the tree response has no
+// top-level name field (documents/media), and is a no-op otherwise (doctypes/blueprints).
+func (d *Document) resolveName() {
+	if d.Name == "" && len(d.Variants) > 0 {
+		d.Name = d.Variants[0].Name
+	}
 }
 
 type documentListResponse struct {
@@ -28,19 +42,32 @@ var contentCmd = &cobra.Command{
 var contentListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List documents",
+	Long: `List documents at the content root, or pass --parent to list the
+children of a specific document instead (for browsing an existing site's
+tree, or finding where to place new test content).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		skip, _ := cmd.Flags().GetInt("skip")
 		take, _ := cmd.Flags().GetInt("take")
+		parent, _ := cmd.Flags().GetString("parent")
 
 		client, err := newClientFromFlags()
 		if err != nil {
 			return err
 		}
 
+		var path string
+		if parent != "" {
+			path = fmt.Sprintf("/tree/document/children?parentId=%s&skip=%d&take=%d", parent, skip, take)
+		} else {
+			path = fmt.Sprintf("/tree/document/root?skip=%d&take=%d", skip, take)
+		}
+
 		var result documentListResponse
-		path := fmt.Sprintf("/tree/document/root?skip=%d&take=%d", skip, take)
 		if err := client.Get(path, &result); err != nil {
 			return err
+		}
+		for i := range result.Items {
+			result.Items[i].resolveName()
 		}
 
 		if output.IsJSON() {
@@ -211,12 +238,42 @@ var contentUnpublishCmd = &cobra.Command{
 	},
 }
 
+var contentValidateCmd = &cobra.Command{
+	Use:   "validate",
+	Short: "Validate a document body without creating it (pass JSON via --file or stdin with --file=-)",
+	Long: `Sends a document-creation payload to the Management API's validation
+endpoint. The document is checked for schema/property errors but never
+persisted — useful for iterating on a --file body before running
+'content create', especially when hand-building test content.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		body, err := readJSONInput(cmd, "file")
+		if err != nil {
+			return err
+		}
+		client, err := newClientFromFlags()
+		if err != nil {
+			return err
+		}
+		if err := client.Post("/document/validate", body, nil); err != nil {
+			return err
+		}
+		if output.IsJSON() {
+			output.JSON(map[string]bool{"valid": true})
+		} else {
+			output.Line("Document is valid.")
+		}
+		return nil
+	},
+}
+
 func init() {
 	contentListCmd.Flags().Int("skip", 0, "Number of items to skip")
 	contentListCmd.Flags().Int("take", 100, "Number of items to return")
+	contentListCmd.Flags().String("parent", "", "Parent document ID (list its children instead of the root)")
 
 	contentCreateCmd.Flags().String("file", "", "Path to JSON file (use - for stdin)")
 	contentUpdateCmd.Flags().String("file", "", "Path to JSON file (use - for stdin)")
+	contentValidateCmd.Flags().String("file", "", "Path to JSON file (use - for stdin)")
 
 	contentPublishCmd.Flags().StringSlice("cultures", []string{}, "Cultures to publish (empty = all)")
 	contentUnpublishCmd.Flags().StringSlice("cultures", []string{}, "Cultures to unpublish (empty = all)")
@@ -228,4 +285,5 @@ func init() {
 	contentCmd.AddCommand(contentDeleteCmd)
 	contentCmd.AddCommand(contentPublishCmd)
 	contentCmd.AddCommand(contentUnpublishCmd)
+	contentCmd.AddCommand(contentValidateCmd)
 }

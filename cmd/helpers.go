@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,4 +43,26 @@ func boolStr(b bool) string {
 		return "yes"
 	}
 	return "no"
+}
+
+// nullableString returns nil for an empty string, otherwise the string itself.
+// Used to build request bodies where the Management API expects null rather
+// than "" for an unset optional field (e.g. property validation messages).
+func nullableString(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// newUUID generates a random RFC 4122 version 4 UUID string, for client-side
+// generated IDs (e.g. new document type properties/containers).
+func newUUID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("cannot generate UUID: %v", err))
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }

@@ -1,4 +1,6 @@
-# Test site (gitignored - local dev only)
+# Generated test Umbraco instance — built from testsite-template/ via
+# scripts/bootstrap-testsite.sh. Never commit this directory's contents;
+# only the template and scripts are tracked.
 testsite/
 
 # Go build output
